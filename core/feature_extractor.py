@@ -3,7 +3,7 @@ from PIL import Image
 import numpy as np
 from torchvision import transforms
 from typing import Union, Optional
-from model import swin_tiny_patch4_window7_224
+from core.model import swin_tiny_patch4_window7_224
 
 def extract_swin_features(
         image_input: Union[str, np.ndarray, Image.Image],  # 支持路径/numpy数组/PIL图像
