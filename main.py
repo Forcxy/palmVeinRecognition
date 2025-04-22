@@ -7,7 +7,7 @@ from pages.login_dialog import LoginDialog
 from pages.main_menu import MainMenu
 from pages.vein_recognition import VeinRecognitionWindow
 from core.database_handler import create_user_db, clear_feature_database, check_user, is_admin, update_last_login
-
+from pages.batchROI import BatchROIWindow
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -28,9 +28,11 @@ class MainWindow(QMainWindow):
         # 添加主菜单和掌静脉识别界面
         self.main_menu = MainMenu(self)
         self.vein_recognition_window = VeinRecognitionWindow(self)
+        self.batch_roi_window = BatchROIWindow(self)  # 新增
 
         self.stacked_widget.addWidget(self.main_menu)
         self.stacked_widget.addWidget(self.vein_recognition_window)
+        self.stacked_widget.addWidget(self.batch_roi_window)  # 新增
 
         self.setCentralWidget(self.stacked_widget)
 

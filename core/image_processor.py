@@ -39,16 +39,20 @@ def enhance_image(img):
     if len(img.shape) == 3:
         img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
-    resized = cv2.resize(img, (128,128), interpolation=cv2.INTER_LINEAR)
+    #尺度归一化
+    # resized = cv2.resize(img, (256,256), interpolation=cv2.INTER_LINEAR)
 
     # 2. 全局直方图均衡化
     #equalized = cv2.equalizeHist(resized)
 
     # 3. 各向异性扩散去噪
-    denoised = anisotropic_diffusion(resized)
+    #denoised = anisotropic_diffusion(resized)
 
     # 4. 局部灰度归一化 (CLAHE)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    final = clahe.apply(denoised)
+    final = clahe.apply(img)  #暂时跳过去噪
 
-    return final
+    # todo 图像增强修改返回通道数
+    final_rgb = cv2.merge([final, final, final])  # 三通道复制
+    # 返回numpy数组
+    return final_rgb

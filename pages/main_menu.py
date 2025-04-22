@@ -11,6 +11,7 @@ class MainMenu(QWidget):
     def setup_ui(self):
         # 创建菜单按钮
         self.vein_recognition_btn = QPushButton("掌静脉识别")
+        self.batch_roi_btn = QPushButton("批量提取ROI")
         self.user_management_btn = QPushButton("用户管理")
         self.system_settings_btn = QPushButton("系统设置")
         self.exit_btn = QPushButton("退出系统")
@@ -41,7 +42,7 @@ class MainMenu(QWidget):
             }
         """
 
-        for btn in [self.vein_recognition_btn, self.system_settings_btn, self.exit_btn]:
+        for btn in [self.vein_recognition_btn, self.system_settings_btn, self.exit_btn,self.batch_roi_btn ]:
             btn.setFont(font)
             btn.setStyleSheet(button_style)
 
@@ -53,6 +54,7 @@ class MainMenu(QWidget):
         # 布局
         layout = QVBoxLayout()
         layout.addWidget(self.vein_recognition_btn)
+        layout.addWidget(self.batch_roi_btn)  # 添加新按钮
         layout.addWidget(self.user_management_btn)
         layout.addWidget(self.system_settings_btn)
         layout.addWidget(self.exit_btn)
@@ -62,11 +64,21 @@ class MainMenu(QWidget):
 
         # 连接信号
         self.vein_recognition_btn.clicked.connect(self.show_vein_recognition)
+        self.batch_roi_btn.clicked.connect(self.show_batch_roi)
         self.user_management_btn.clicked.connect(self.show_user_management)
         self.exit_btn.clicked.connect(self.parent.close)
 
     def show_vein_recognition(self):
         self.parent.stacked_widget.setCurrentIndex(1)
+
+    def show_batch_roi(self):
+        # 如果批量ROI界面还未创建，则创建它
+        if not hasattr(self.parent, 'batch_roi_window'):
+            from pages.batchROI import BatchROIWindow
+            self.parent.batch_roi_window = BatchROIWindow(self.parent)
+            self.parent.stacked_widget.addWidget(self.parent.batch_roi_window)
+
+        self.parent.stacked_widget.setCurrentWidget(self.parent.batch_roi_window)
 
     def show_user_management(self):
         # 检查是否是管理员

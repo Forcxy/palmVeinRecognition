@@ -567,6 +567,7 @@ class SwinTransformer(nn.Module):
 def swin_tiny_patch4_window7_224(num_classes: int = 1000, **kwargs):
     # trained ImageNet-1K
     # https://github.com/SwinTransformer/storage/releases/download/v1.0.0/swin_tiny_patch4_window7_224.pth
+    # todo 修改通道数量
     model = SwinTransformer(in_chans=3,
                             patch_size=4,
                             window_size=7,

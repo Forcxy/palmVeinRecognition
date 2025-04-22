@@ -9,6 +9,8 @@ from itertools import combinations
 from typing import List, Tuple, Dict
 from core.feature_extractor import extract_swin_features
 import matplotlib.pyplot as plt
+import cv2
+from core.image_processor import enhance_image
 
 
 # 设置字体
@@ -29,14 +31,37 @@ class CASIADatasetProcessor:
         self.dataset_path = dataset_path
         self.weight_path = weight_path
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        # self.classes = sorted(os.listdir(dataset_path)) 去掉—_2子类
-        self.classes = sorted([
-            d for d in os.listdir(dataset_path)
-            if os.path.isdir(os.path.join(dataset_path, d)) and not d.endswith('_2')
-        ])
+        self.classes = sorted(os.listdir(dataset_path)) #去掉—_2子类
+        # self.classes = sorted([
+        #     d for d in os.listdir(dataset_path)
+        #     if os.path.isdir(os.path.join(dataset_path, d)) and not d.endswith('_2')
+        # ])
         self.features_cache = {}  # 缓存特征向量
         self._validate_dataset()
 
+    def evaluate_threshold_crr(self, pos_sims: np.ndarray, neg_sims: np.ndarray, threshold: float):
+        """
+        基于指定阈值评估正负样本对的识别准确率（即二分类正确率）
+
+        参数:
+            pos_sims: 正样本对相似度数组
+            neg_sims: 负样本对相似度数组
+            threshold: 判定是否为同一类的相似度阈值
+
+        返回:
+            None（打印识别率）
+        """
+        print(f"\n使用阈值 {threshold:.4f} 评估识别准确率（Threshold-based CRR）...")
+
+        # 标签：正样本为1，负样本为0
+        y_true = np.concatenate([np.ones_like(pos_sims), np.zeros_like(neg_sims)])
+        y_pred = np.concatenate([pos_sims, neg_sims]) >= threshold  # 阈值判定
+
+        correct = np.sum(y_pred == y_true)
+        total = len(y_true)
+        acc = correct / total
+
+        print(f"Threshold-based CRR: {acc:.4f} ({correct}/{total})")
     def _validate_dataset(self):
         """验证数据集结构是否符合预期"""
         print("验证数据集结构...")
@@ -49,7 +74,47 @@ class CASIADatasetProcessor:
             if len(images) < 2:
                 raise ValueError(f"类别 {cls} 中的图像数量不足 (至少需要2张)")
         print(f"数据集验证通过，共 {len(self.classes)} 个类别")
+    def evaluate_crr_top1(self):
+        """
+        评估识别率 (Top-1 CRR)：
+        对每张图像，用它和所有类别中的图像计算相似度，看最高相似度是否来自正确类别
+        """
+        print("\n评估 Top-1 识别率（CRR）...")
+        self.extract_all_features()  # 确保特征提取
 
+        total = 0
+        correct = 0
+
+        for cls_idx, cls in enumerate(self.classes):
+            cls_features = self.features_cache[cls]
+
+            for i, probe_feat in enumerate(cls_features):  # 当前图像作为probe
+                max_sim = -1
+                predicted_class = None
+
+                for candidate_cls_idx, candidate_cls in enumerate(self.classes):
+                    candidate_feats = self.features_cache[candidate_cls]
+                    # 与目标类中所有图像求相似度，再取最大
+                    sims = F.cosine_similarity(probe_feat.unsqueeze(0), candidate_feats).cpu().numpy()
+                    mean_sim = np.max(sims)  # 或者用 np.mean(sims) 作为类代表
+
+                    if mean_sim > max_sim:
+                        max_sim = mean_sim
+                        predicted_class = candidate_cls_idx
+
+                total += 1
+                if predicted_class == cls_idx:
+                    correct += 1
+
+        acc = correct / total
+        print(f"Top-1 CRR: {acc:.4f} ({correct}/{total})")
+
+    def _get_last_threshold(self):
+        """获取上次 evaluate_performance 中的最佳阈值"""
+        if not hasattr(self, 'last_threshold'):
+            raise ValueError("尚未评估性能，请先调用 evaluate_performance 方法")
+        return self.last_threshold
+    # 批处理
     def extract_all_features(self, force_reload: bool = False):
         """
         提取所有图像的特征向量并缓存
@@ -70,15 +135,34 @@ class CASIADatasetProcessor:
             cls_features = []
 
             for img_name in images:
-                img_path = os.path.join(cls_path, img_name)
-                feature = extract_swin_features(
-                    img_path,
-                    self.weight_path,
-                    device=self.device
-                )
-                cls_features.append(feature)
+                try:
+                    img_path = os.path.join(cls_path, img_name)
 
-            self.features_cache[cls] = torch.stack(cls_features)
+                    # 1. 读取原始图像
+                    img = cv2.imread(img_path)
+                    if img is None:
+                        print(f"警告：无法读取图像 {img_path}")
+                        continue
+
+                    # 2. 图像增强处理
+                    enhanced_img = enhance_image(img)  # 使用您提供的enhance_image函数
+
+                    # 4. 提取特征
+                    feature = extract_swin_features(
+                        image_input=enhanced_img,  # 传入增强后的图像
+                        weight_path=self.weight_path,
+                        device=self.device
+                    )
+                    cls_features.append(feature)
+
+                except Exception as e:
+                    print(f"处理图像 {img_name} 时出错: {str(e)}")
+                    continue
+
+            if cls_features:  # 确保列表不为空
+                self.features_cache[cls] = torch.stack(cls_features)
+            else:
+                print(f"警告：类别 {cls} 没有成功提取任何特征")
 
         print("特征提取完成")
 
@@ -177,6 +261,7 @@ class CASIADatasetProcessor:
         return self.last_pos_sims, self.last_neg_sims
 
     def evaluate_performance(self, pos_sims: np.ndarray, neg_sims: np.ndarray, plot: bool = True):
+
         """
         评估性能并绘制ROC曲线和ERR曲线
         """
@@ -207,6 +292,8 @@ class CASIADatasetProcessor:
             # 只需要传递 fpr, tpr, roc_auc, eer
             self._plot_curves(fpr, tpr, roc_auc, eer)
 
+        self.last_threshold = eer_threshold
+
     def _plot_curves(self, fpr: np.ndarray, tpr: np.ndarray, roc_auc: float, eer: float):
         """绘制ROC曲线和ERR曲线
         参数:
@@ -232,15 +319,15 @@ class CASIADatasetProcessor:
         plt.title('FAR-FRR curve')
         plt.legend(loc="upper right")
 
-        # 相似度分布直方图
-        plt.subplot(1, 2, 2)
-        pos_sims, neg_sims = self._get_last_similarities()
-        plt.hist(pos_sims, bins=50, alpha=0.5, label='正样本对', color='blue')
-        plt.hist(neg_sims, bins=50, alpha=0.5, label='负样本对', color='red')
-        plt.xlabel('余弦相似度')
-        plt.ylabel('频数')
-        plt.title('正负样本对相似度分布')
-        plt.legend(loc='upper right')
+        # # 相似度分布直方图
+        # plt.subplot(1, 2, 2)
+        # pos_sims, neg_sims = self._get_last_similarities()
+        # plt.hist(pos_sims, bins=50, alpha=0.5, label='正样本对', color='blue')
+        # plt.hist(neg_sims, bins=50, alpha=0.5, label='负样本对', color='red')
+        # plt.xlabel('余弦相似度')
+        # plt.ylabel('频数')
+        # plt.title('正负样本对相似度分布')
+        # plt.legend(loc='upper right')
 
         plt.tight_layout()
         plt.show()
@@ -255,11 +342,14 @@ class CASIADatasetProcessor:
         return self.last_pos_sims, self.last_neg_sims
 
 
+
+
+
 if __name__ == "__main__":
     # 配置参数
     DATASET_PATH = "../dataset/CASIA"  # 替换为实际路径
     WEIGHT_PATH = "../weights/model_swint56.pth"  # 替换为实际路径
-    CUSTOM_NUM_PAIRS = 2000  # None表示自动计算，或指定自定义数量
+    CUSTOM_NUM_PAIRS = 1000  # None表示自动计算，或指定自定义数量
 
     # 初始化处理器
     processor = CASIADatasetProcessor(DATASET_PATH, WEIGHT_PATH)
@@ -272,3 +362,7 @@ if __name__ == "__main__":
 
     # 评估性能并绘制曲线
     processor.evaluate_performance(pos_sims, neg_sims)
+
+    # 使用最佳阈值进行识别评估
+    best_threshold = processor._get_last_threshold()
+    processor.evaluate_threshold_crr(pos_sims, neg_sims, best_threshold)
