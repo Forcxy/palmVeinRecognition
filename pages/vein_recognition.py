@@ -2,25 +2,23 @@ import os
 import cv2
 import numpy as np
 from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QFileDialog, QVBoxLayout,
-                           QHBoxLayout, QTextEdit, QComboBox, QInputDialog,QSpacerItem, QSizePolicy)
+                             QHBoxLayout, QTextEdit, QComboBox, QInputDialog, QSpacerItem, QSizePolicy)
 from PyQt5.QtGui import QPixmap, QImage, QFont
 from PyQt5.QtCore import Qt
 from core.roi_handler import extract_roi
 from core.image_processor import enhance_image
-from core.database_handler import save_feature, load_feature
-from core.feature_extractor import extract_swin_features
+from core.database_handler import save_feature, load_features_by_model
+from core.feature_extractor_Top import extract_features  # 使用新的统一特征提取函数
+
 
 def cosine_similarity(a, b):
+    """余弦相似度"""
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 
-def dummy_model_feature(img):
-    model_weight_path = r"C:\Users\CXY\Desktop\graduationDesign\src\palmVeinRecognition\application\weights\model_swint56.pth"
-    return extract_swin_features(
-        image_input=img,  # 直接传递numpy数组
-        weight_path=model_weight_path,
-        roi_size=224
-    )
+def euclidean_distance(a, b):
+    """欧式距离"""
+    return np.linalg.norm(a - b)
 
 
 class VeinRecognitionWindow(QWidget):
@@ -32,6 +30,8 @@ class VeinRecognitionWindow(QWidget):
         self.enhanced_image = None
         self.roi_image = None
         self.detect_image = None
+        self.current_model = 'swin'  # 默认模型
+        self.current_metric = 'cosine'  # 默认距离度量
 
     def setup_ui(self):
         font = QFont("华文中宋", 12)
@@ -86,20 +86,24 @@ class VeinRecognitionWindow(QWidget):
         self.back_btn = QPushButton("返回主菜单")
         self.back_btn.clicked.connect(self.go_back)
 
-        for btn in [self.upload_btn, self.feature_btn, self.match_btn, self.back_btn]:
-            btn.setFont(font)
-            btn.setStyleSheet(
-                "QPushButton { background-color: #ADD8E6; color: black; padding: 10px; border-radius: 10px; } QPushButton:hover { background-color: #87CEEB; }")
-
+        # 模型选择下拉框
         self.model_selector = QComboBox()
-        self.model_selector.addItems(["Swin-transformer"])
+        self.model_selector.addItems(["Swin-transformer", "ResNet"])
         self.model_selector.setFont(font)
+        self.model_selector.currentTextChanged.connect(self.change_model)
+
+        # 距离度量选择下拉框
+        self.metric_selector = QComboBox()
+        self.metric_selector.addItems(["余弦距离", "欧式距离"])
+        self.metric_selector.setFont(font)
+        self.metric_selector.currentTextChanged.connect(self.change_metric)
 
         btn_layout = QHBoxLayout()
         btn_layout.addWidget(self.upload_btn)
         btn_layout.addWidget(self.feature_btn)
         btn_layout.addWidget(self.match_btn)
         btn_layout.addWidget(self.model_selector)
+        btn_layout.addWidget(self.metric_selector)
         btn_layout.addWidget(self.back_btn)
 
         image_layout = QHBoxLayout()
@@ -136,8 +140,21 @@ class VeinRecognitionWindow(QWidget):
 
         self.setLayout(main_layout)
 
+    def change_model(self, text):
+        """切换特征提取模型"""
+        if text == "Swin-transformer":
+            self.current_model = 'swin'
+        else:
+            self.current_model = 'resnet'
+        self.result_text.append(f"[INFO] 已切换模型: {text}")
 
-
+    def change_metric(self, text):
+        """切换距离度量方法"""
+        if text == "余弦距离":
+            self.current_metric = 'cosine'
+        else:
+            self.current_metric = 'euclidean'
+        self.result_text.append(f"[INFO] 已切换距离度量: {text}")
 
     def go_back(self):
         self.parent.stacked_widget.setCurrentIndex(0)
@@ -180,47 +197,61 @@ class VeinRecognitionWindow(QWidget):
 
     def register_feature(self):
         if self.roi_image is not None:
-            vec = dummy_model_feature(self.enhanced_image)
+            # 使用新的特征提取函数
+            vec = extract_features(
+                model_type=self.current_model,
+                image_input=self.enhanced_image,
+                roi_size=224
+            ).numpy()  # 转换为numpy数组
+
             name, ok = QInputDialog.getText(self, "用户注册", "请输入用户名：")
             if ok and name:
                 user = os.path.splitext(os.path.basename(name))[0]
-                save_feature(user, vec)
-                self.result_text.append(f"[INFO] 特征向量已注册为：{user}")
+                save_feature(user, self.current_model, vec)  # 保存时记录模型类型
+                self.result_text.append(f"[INFO] {self.current_model}特征向量已注册为：{user}")
 
     def match_feature(self):
         if self.roi_image is not None:
             # 1. 提取当前图像特征
-            current_vec = dummy_model_feature(self.enhanced_image)
+            current_vec = extract_features(
+                model_type=self.current_model,
+                image_input=self.enhanced_image,
+                roi_size=224
+            ).numpy()
 
-            # 2. 加载数据库
-            db = load_feature()
+            # 2. 加载同模型类型的数据库特征
+            db = load_features_by_model(self.current_model)  # 只加载当前模型的特征
             if not db:
-                self.result_text.append("[WARN] 数据库为空，无法匹配")
+                self.result_text.append(f"[WARN] 没有找到{self.current_model}模型的注册特征")
                 return
 
-            # 打印所有姓名和特征向量
-            self.result_text.append("[INFO] 数据库中的注册用户：")
-            for name, vector in db.items():
-                self.result_text.append(f"  - 用户名: {name}")
-                self.result_text.append(f"    特征向量: {vector.tolist()[:5]}... (共 {len(vector)} 维)")
-
-            # 3. 计算所有相似度并排序
-            similarity_scores = []
+            # 3. 计算所有相似度/距离并排序
+            scores = []
             for user, db_vec in db.items():
-                sim = cosine_similarity(current_vec, np.array(db_vec))
-                similarity_scores.append((user, sim))
+                if self.current_metric == 'cosine':
+                    score = cosine_similarity(current_vec, db_vec)
+                else:  # euclidean
+                    score = -euclidean_distance(current_vec, db_vec)  # 使用负值以便统一排序
+                scores.append((user, score))
 
-            # 按相似度降序排序
-            similarity_scores.sort(key=lambda x: x[1], reverse=True)
+            # 按得分降序排序
+            scores.sort(key=lambda x: x[1], reverse=True)
 
             # 4. 显示前三结果
-            self.result_text.append("\n[MATCH] 相似度排名：")
-            for i, (user, score) in enumerate(similarity_scores[:3], 1):
-                self.result_text.append(f"TOP {i}: {user} (相似度: {score:.4f})")
+            metric_name = "相似度" if self.current_metric == 'cosine' else "距离(负值)"
+            self.result_text.append(f"\n[MATCH] {self.current_model}模型匹配结果（{metric_name}）排名：")
+            for i, (user, score) in enumerate(scores[:3], 1):
+                self.result_text.append(f"TOP {i}: {user} ({metric_name}: {score:.4f})")
 
             # 5. 添加匹配建议
-            best_user, best_score = similarity_scores[0]
-            if best_score > 0.8:  # 假设阈值设为0.8
-                self.result_text.append(f"\n[RESULT] 匹配成功: {best_user}")
-            else:
-                self.result_text.append("\n[RESULT] 无可靠匹配")
+            best_user, best_score = scores[0]
+            if self.current_metric == 'cosine':
+                if best_score > 0.8:  # 余弦相似度阈值
+                    self.result_text.append(f"\n[RESULT] 匹配成功: {best_user}")
+                else:
+                    self.result_text.append("\n[RESULT] 无可靠匹配")
+            else:  # 欧式距离
+                if -best_score < 1.0:  # 欧式距离阈值
+                    self.result_text.append(f"\n[RESULT] 匹配成功: {best_user}")
+                else:
+                    self.result_text.append("\n[RESULT] 无可靠匹配")

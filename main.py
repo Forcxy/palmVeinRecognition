@@ -6,7 +6,7 @@ from PyQt5.QtCore import Qt
 from pages.login_dialog import LoginDialog
 from pages.main_menu import MainMenu
 from pages.vein_recognition import VeinRecognitionWindow
-from core.database_handler import create_user_db, clear_feature_database, check_user, is_admin, update_last_login
+from core.database_handler import create_user_db, clear_feature_database, check_user, is_admin, update_last_login, init_databases
 from pages.batchROI import BatchROIWindow
 
 class MainWindow(QMainWindow):
@@ -65,7 +65,10 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
-    clear_feature_database()  # 每次启动时清空特征数据库
+    # 1. 首先初始化数据库（确保表存在）
+    init_databases()
+    # 2. 然后才清空数据（如果需要）
+    clear_feature_database()  # 注意：生产环境应移除这行
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
