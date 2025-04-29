@@ -99,7 +99,7 @@ class CASIADatasetProcessor:
                     #     device=self.device
                     # )
                     feature = extract_features(
-                        model_type='resnet',
+                        model_type='mobileViT',
                         weight_path=self.weight_path,
                         image_input=enhanced_img,
                     )
@@ -378,7 +378,8 @@ if __name__ == "__main__":
     # 配置参数
     DATASET_PATH = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\dataset\CASIA"  # 数据集路径
     #DATASET_PATH = r"C:\Users\CXY\Desktop\graduationDesign\dataset\AllVeinDataset\HFUT_split\val"  # 数据集路径
-    WEIGHT_PATH = None  # 模型权重路径
+    WEIGHT_PATH = None # None表示使用默认路径
+    #WEIGHT_PATH = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\weights\resNet18-all.pth"  # 模型权重路径
     CUSTOM_NUM_PAIRS = None # 自定义样本对数（None表示自动计算）
 
     # 初始化处理器

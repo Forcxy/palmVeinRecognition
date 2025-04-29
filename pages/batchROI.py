@@ -184,7 +184,7 @@ class BatchROIWindow(QWidget):
         self.denoise_kernel_spin.setValue(5)
         self.denoise_kernel_spin.setSingleStep(2)
         self.denoise_kernel_spin.setPrefix("Kernel: ")
-        self.denoise_kernel_spin.setSuffix("x5")
+        #self.denoise_kernel_spin.setSuffix("x5")
 
         denoise_layout = QHBoxLayout()
         denoise_layout.addWidget(self.denoise_check)

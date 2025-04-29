@@ -89,11 +89,11 @@ class CASIADatasetProcessor:
                         continue
 
                     # 2. 图像增强处理,均转成灰度图像
-                    enhanced_img = enhance_image(img)
+                    # enhanced_img = enhance_image(img)
 
                     # 3. 使用Swin Transformer提取特征
                     feature = extract_swin_features(
-                        image_input=enhanced_img,
+                        image_input=img,
                         weight_path=self.weight_path,
                         device=self.device
                     )
@@ -372,7 +372,7 @@ if __name__ == "__main__":
     # 配置参数
     DATASET_PATH = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\dataset\CASIA"  # 数据集路径
     #DATASET_PATH = r"C:\Users\CXY\Desktop\graduationDesign\dataset\AllVeinDataset\HFUT_split\val"  # 数据集路径
-    WEIGHT_PATH = "../weights/model_swint63-C1-E.pth"  # 模型权重路径
+    WEIGHT_PATH = "../weights/model_swint68.pth"  # 模型权重路径
     CUSTOM_NUM_PAIRS = None # 自定义样本对数（None表示自动计算）
 
     # 初始化处理器

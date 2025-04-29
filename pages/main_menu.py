@@ -15,8 +15,9 @@ class MainMenu(QWidget):
         self.batch_roi_btn = QPushButton("批量提取ROI")
         self.batch_register_btn = QPushButton("批量特征注册")
         self.user_management_btn = QPushButton("用户管理")
-        self.system_settings_btn = QPushButton("系统设置")
+        self.system_settings_btn = QPushButton("退出登录")
         self.exit_btn = QPushButton("退出系统")
+        self.feature_db_btn = QPushButton("特征数据库管理")
 
         # 设置按钮样式
         font = QFont("华文中宋", 14)
@@ -44,7 +45,7 @@ class MainMenu(QWidget):
             }
         """
 
-        for btn in [self.vein_recognition_btn, self.system_settings_btn, self.exit_btn,self.batch_roi_btn, self.batch_register_btn ]:
+        for btn in [self.vein_recognition_btn, self.system_settings_btn, self.exit_btn,self.batch_roi_btn, self.batch_register_btn]:
             btn.setFont(font)
             btn.setStyleSheet(button_style)
 
@@ -52,15 +53,20 @@ class MainMenu(QWidget):
         self.user_management_btn.setFont(font)
         self.user_management_btn.setObjectName("admin_btn")
         self.user_management_btn.setStyleSheet(button_style)
+        # 特诊数据库管理
+        self.feature_db_btn.setFont(font)
+        self.feature_db_btn.setObjectName("admin_btn")
+        self.feature_db_btn.setStyleSheet(button_style)
 
         # 布局
         layout = QVBoxLayout()
         layout.addWidget(self.vein_recognition_btn)
         layout.addWidget(self.batch_roi_btn)  # 添加新按钮
         layout.addWidget(self.batch_register_btn)  # 新增按钮
-        layout.addWidget(self.user_management_btn)
         layout.addWidget(self.system_settings_btn)
         layout.addWidget(self.exit_btn)
+        layout.addWidget(self.user_management_btn)
+        layout.addWidget(self.feature_db_btn)  # 添加到布局中
         layout.addStretch(1)
 
         self.setLayout(layout)
@@ -71,7 +77,29 @@ class MainMenu(QWidget):
         self.user_management_btn.clicked.connect(self.show_user_management)
         self.exit_btn.clicked.connect(self.parent.close)
         self.batch_register_btn.clicked.connect(self.show_batch_register)
+        self.feature_db_btn.clicked.connect(self.show_feature_database)
+        self.system_settings_btn.clicked.connect(self.logout)  # 连接到新的登出方法
 
+    def logout(self):
+        """处理退出登录逻辑"""
+        reply = QMessageBox.question(
+            self, '确认退出',
+            '确定要退出当前账号吗?',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            # 重置用户状态
+            self.parent.is_admin = False
+            self.parent.current_user = None
+
+            # 跳转到登录界面
+            self.parent.stacked_widget.setCurrentIndex(0)
+
+            # 清空密码输入框等（假设登录界面是第一个widget）
+            if hasattr(self.parent, 'login_page'):
+                self.parent.login_page.clear_fields()
     def show_vein_recognition(self):
         self.parent.stacked_widget.setCurrentIndex(1)
 
@@ -91,6 +119,18 @@ class MainMenu(QWidget):
             self.parent.stacked_widget.addWidget(self.parent.batch_roi_window)
 
         self.parent.stacked_widget.setCurrentWidget(self.parent.batch_roi_window)
+
+    def show_feature_database(self):
+        # if not self.parent.is_admin:
+        #     QMessageBox.warning(self, "权限不足", "只有管理员可以访问用户管理功能!")
+        #     return
+        # 如果特征数据库界面还未创建，则创建它
+        if not hasattr(self.parent, 'feature_db_window'):
+            from pages.FeatureDatabaseWindow import FeatureDatabaseWindow
+            self.parent.feature_db_window = FeatureDatabaseWindow(self.parent)
+            self.parent.stacked_widget.addWidget(self.parent.feature_db_window)
+
+        self.parent.stacked_widget.setCurrentWidget(self.parent.feature_db_window)
 
     def show_user_management(self):
         # 检查是否是管理员

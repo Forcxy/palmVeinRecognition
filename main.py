@@ -9,6 +9,7 @@ from pages.vein_recognition import VeinRecognitionWindow
 from core.database_handler import create_user_db, clear_feature_database, check_user, is_admin, update_last_login, init_databases
 from pages.batchROI import BatchROIWindow
 
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()

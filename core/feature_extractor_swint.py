@@ -3,11 +3,11 @@ from PIL import Image
 import numpy as np
 from torchvision import transforms
 from typing import Union, Optional
-from core.model import swin_tiny_patch4_window7_224
+from core.model_swin import swin_tiny_patch4_window7_224
 
 def extract_swin_features(
         image_input: Union[str, np.ndarray, Image.Image],  # 支持路径/numpy数组/PIL图像
-        weight_path: str = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\weights\model_swint51-C3.pth",
+        weight_path: str = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\weights\model_swin_L2L3_1.pth",
         roi_size: int = 224,
         device: Optional[str] = None
 ) -> torch.Tensor:

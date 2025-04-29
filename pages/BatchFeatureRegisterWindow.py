@@ -88,7 +88,7 @@ class BatchFeatureRegisterWindow(QWidget):
 
         # 模型选择
         self.model_selector = QComboBox()
-        self.model_selector.addItems(["Swin-transformer", "ResNet"])
+        self.model_selector.addItems(["Swin-transformer", "ResNet", "MobileViT", "ViT"])
         self.model_selector.currentTextChanged.connect(self.change_model)
         settings_layout.addRow("特征提取模型:", self.model_selector)
 
@@ -178,7 +178,15 @@ class BatchFeatureRegisterWindow(QWidget):
         self.setLayout(main_layout)
 
     def change_model(self, text):
-        self.current_model = 'swin' if text == "Swin-transformer" else 'resnet'
+        """切换特征提取模型"""
+        if text == "Swin-transformer":
+            self.current_model = 'swin'
+        elif text == "ResNet":
+            self.current_model = 'resnet'
+        elif text == "ViT":
+            self.current_model = 'viT'
+        elif text == "MobileViT":
+            self.current_model = 'mobileViT'
         self.log_text.append(f"[设置] 已选择模型: {text}")
 
     def change_image_type(self, text):

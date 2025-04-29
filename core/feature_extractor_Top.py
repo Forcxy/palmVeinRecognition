@@ -2,11 +2,13 @@ from typing import Union, Optional, Literal
 import torch
 import numpy as np
 from PIL import Image
-from core.feature_extractor_resnet import extract_resnet_features
+from core.feature_extractor_resnet import extract_resnet18_features
 from core.feature_extractor_swint import extract_swin_features
+from core.feature_extractor_viT import extract_vit_features
+from core.feature_extractor_moblieViT import extract_mobilevit_features
 
 def extract_features(
-        model_type: Literal['resnet', 'swin'],
+        model_type: Literal['resnet', 'swin', 'viT', 'mobileViT'],
         image_input: Union[str, np.ndarray, Image.Image],
         weight_path: str = None,  # 设为可选
         roi_size: int = 224,
@@ -29,28 +31,37 @@ def extract_features(
     返回:
         torch.Tensor: 特征向量 (CPU tensor)
     """
-    if weight_path is None:
-        if model_type == 'resnet':
-            weight_path = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\weights\resNet34.pth"  # 替换为实际路径
-        elif model_type == 'swin':
-            weight_path = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\weights\model_swint51-C3.pth"  # 替换为实际路径
-
+    # 注意不能传None
     if model_type == 'resnet':
-        return extract_resnet_features(
+        return extract_resnet18_features(
             image_input=image_input,
-            weight_path=weight_path,
             roi_size=roi_size,
             device=device,
         )
+
     elif model_type == 'swin':
         return extract_swin_features(
             image_input=image_input,
-            weight_path=weight_path,
             roi_size=roi_size,
             device=device
         )
+    elif model_type == 'viT':
+        return extract_vit_features(
+            image_input=image_input,
+            weight_path=weight_path,
+            img_size=roi_size,
+            device=device,
+            use_cls_token=True
+        )
+    elif model_type == 'mobileViT':
+        return extract_mobilevit_features(
+            image_input=image_input,
+            weight_path=weight_path,
+            img_size=roi_size,
+            device=device
+        )
     else:
-        raise ValueError(f"不支持的模型类型: {model_type}. 请选择 'resnet' 或 'swin'")
+        raise ValueError(f"不支持的模型类型: {model_type}. 请选择 'resnet' 或 'swin'或")
 
 # 使用示例:
 # 1. 使用ResNet提取特征

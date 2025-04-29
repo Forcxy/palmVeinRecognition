@@ -2,13 +2,14 @@ import os
 import cv2
 import numpy as np
 from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QFileDialog, QVBoxLayout,
-                             QHBoxLayout, QTextEdit, QComboBox, QInputDialog, QSpacerItem, QSizePolicy)
+                             QHBoxLayout, QTextEdit, QComboBox, QInputDialog, QSpacerItem,
+                             QSizePolicy, QSlider, QGroupBox)
 from PyQt5.QtGui import QPixmap, QImage, QFont
 from PyQt5.QtCore import Qt
 from core.roi_handler import extract_roi
 from core.image_processor import enhance_image
 from core.database_handler import save_feature, load_features_by_model
-from core.feature_extractor_Top import extract_features  # 使用新的统一特征提取函数
+from core.feature_extractor_Top import extract_features
 
 
 def cosine_similarity(a, b):
@@ -30,8 +31,10 @@ class VeinRecognitionWindow(QWidget):
         self.enhanced_image = None
         self.roi_image = None
         self.detect_image = None
-        self.current_model = 'swin'  # 默认模型
-        self.current_metric = 'cosine'  # 默认距离度量
+        self.current_model = 'swin'
+        self.current_metric = 'cosine'
+        self.clahe_clip_limit = 2.0
+        self.clahe_grid_size = 8
 
     def setup_ui(self):
         font = QFont("华文中宋", 12)
@@ -74,6 +77,7 @@ class VeinRecognitionWindow(QWidget):
             }
         """)
 
+        # 主功能按钮
         self.upload_btn = QPushButton("上传图像")
         self.upload_btn.clicked.connect(self.upload_image)
 
@@ -88,7 +92,7 @@ class VeinRecognitionWindow(QWidget):
 
         # 模型选择下拉框
         self.model_selector = QComboBox()
-        self.model_selector.addItems(["Swin-transformer", "ResNet"])
+        self.model_selector.addItems(["Swin-transformer", "ResNet", "ViT", "MobileViT"])
         self.model_selector.setFont(font)
         self.model_selector.currentTextChanged.connect(self.change_model)
 
@@ -98,6 +102,7 @@ class VeinRecognitionWindow(QWidget):
         self.metric_selector.setFont(font)
         self.metric_selector.currentTextChanged.connect(self.change_metric)
 
+        # 按钮布局
         btn_layout = QHBoxLayout()
         btn_layout.addWidget(self.upload_btn)
         btn_layout.addWidget(self.feature_btn)
@@ -106,6 +111,7 @@ class VeinRecognitionWindow(QWidget):
         btn_layout.addWidget(self.metric_selector)
         btn_layout.addWidget(self.back_btn)
 
+        # 图像布局
         image_layout = QHBoxLayout()
 
         # 原图列
@@ -123,13 +129,44 @@ class VeinRecognitionWindow(QWidget):
         vbox2.addWidget(self.roi_caption)
         image_layout.addLayout(vbox2)
 
-        # 图像增强列（垂直居中处理）
-        enhanced_vbox = QVBoxLayout()
-        enhanced_vbox.addStretch(1)
-        enhanced_vbox.addWidget(self.enhanced_label, alignment=Qt.AlignHCenter)
-        enhanced_vbox.addStretch(1)
+        # 图像增强列
+        enhanced_container = QWidget()
+        enhanced_vbox = QVBoxLayout(enhanced_container)
+
+        # 添加参数控制
+        param_label = QLabel("图像增强参数设置")
+        param_label.setAlignment(Qt.AlignCenter)
+        param_label.setStyleSheet("font-weight: bold; margin-bottom: 5px;")
+        enhanced_vbox.addWidget(param_label)
+
+        # 滑块控制
+        slider_hbox = QHBoxLayout()
+
+        # 对比度限制滑块
+        self.clip_limit_slider = QSlider(Qt.Horizontal)
+        self.clip_limit_slider.setRange(10, 80)  # 1.0-4.0
+        self.clip_limit_slider.setValue(20)  # 默认2.0
+        self.clip_limit_slider.valueChanged.connect(self.update_enhanced_image)
+
+        # 网格大小滑块
+        self.grid_size_slider = QSlider(Qt.Horizontal)
+        self.grid_size_slider.setRange(1, 20)  # 1-20
+        self.grid_size_slider.setValue(8)  # 默认8
+        self.grid_size_slider.valueChanged.connect(self.update_enhanced_image)
+
+        # 添加到滑块布局
+        slider_hbox.addWidget(QLabel("对比度:"))
+        slider_hbox.addWidget(self.clip_limit_slider)
+        slider_hbox.addWidget(QLabel("网格:"))
+        slider_hbox.addWidget(self.grid_size_slider)
+
+        enhanced_vbox.addLayout(slider_hbox)
+
+        # 添加增强图像和标题
+        enhanced_vbox.addWidget(self.enhanced_label)
         enhanced_vbox.addWidget(self.enhanced_caption)
-        image_layout.addLayout(enhanced_vbox)
+
+        image_layout.addWidget(enhanced_container)
 
         # 总体布局
         main_layout = QVBoxLayout()
@@ -144,8 +181,13 @@ class VeinRecognitionWindow(QWidget):
         """切换特征提取模型"""
         if text == "Swin-transformer":
             self.current_model = 'swin'
-        else:
+        elif text == "ResNet":
             self.current_model = 'resnet'
+        elif text == "ViT":
+            self.current_model = 'viT'
+        elif text == "MobileViT":
+            self.current_model = 'mobileViT'
+
         self.result_text.append(f"[INFO] 已切换模型: {text}")
 
     def change_metric(self, text):
@@ -176,8 +218,7 @@ class VeinRecognitionWindow(QWidget):
         self.detect_image, self.roi_image = extract_roi(self.original_image)
         if self.roi_image is not None:
             self.display_image(self.roi_label, self.detect_image)
-            self.enhanced_image = enhance_image(self.roi_image)
-            self.display_image(self.enhanced_label, self.enhanced_image)
+            self.update_enhanced_image()
             self.result_text.append("[INFO] 图像加载并处理成功")
         else:
             self.result_text.append("[WARN] ROI提取失败，请上传清晰的手掌图像")
@@ -190,68 +231,96 @@ class VeinRecognitionWindow(QWidget):
             qimg = QImage(img.data, w, h, bytes_per_line, QImage.Format_RGB888).rgbSwapped()
         else:  # 灰度图像
             h, w = img.shape
+            if not img.flags['C_CONTIGUOUS']:
+                img = np.ascontiguousarray(img)
             qimg = QImage(img.data, w, h, w, QImage.Format_Grayscale8)
 
-        pixmap = QPixmap.fromImage(qimg).scaled(label.width(), label.height(), Qt.KeepAspectRatio)
+        pixmap = QPixmap.fromImage(qimg).scaled(
+            label.width(), label.height(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
         label.setPixmap(pixmap)
+
+    def enhance_image(self, image, clip_limit=2.0, grid_size=8):
+        """增强图像(带CLAHE参数)"""
+        clahe = cv2.createCLAHE(
+            clipLimit=clip_limit,
+            tileGridSize=(grid_size, grid_size)
+        )
+
+        if len(image.shape) == 3:  # 彩色图像
+            lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+            l, a, b = cv2.split(lab)
+            l = clahe.apply(l)
+            return cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
+        else:  # 灰度图像
+            return clahe.apply(image)
+
+    def update_enhanced_image(self):
+        """当CLAHE参数变化时更新增强图像"""
+        if self.roi_image is not None:
+            clip_limit = self.clip_limit_slider.value() / 10.0
+            grid_size = self.grid_size_slider.value()
+
+            self.enhanced_image = self.enhance_image(
+                self.roi_image,
+                clip_limit=clip_limit,
+                grid_size=grid_size
+            )
+
+            self.display_image(self.enhanced_label, self.enhanced_image)
 
     def register_feature(self):
         if self.roi_image is not None:
-            # 使用新的特征提取函数
             vec = extract_features(
                 model_type=self.current_model,
                 image_input=self.enhanced_image,
                 roi_size=224
-            ).numpy()  # 转换为numpy数组
+            ).numpy()
 
             name, ok = QInputDialog.getText(self, "用户注册", "请输入用户名：")
             if ok and name:
                 user = os.path.splitext(os.path.basename(name))[0]
-                save_feature(user, self.current_model, vec)  # 保存时记录模型类型
+                save_feature(user, self.current_model, vec)
                 self.result_text.append(f"[INFO] {self.current_model}特征向量已注册为：{user}")
 
     def match_feature(self):
         if self.roi_image is not None:
-            # 1. 提取当前图像特征
             current_vec = extract_features(
                 model_type=self.current_model,
                 image_input=self.enhanced_image,
                 roi_size=224
             ).numpy()
 
-            # 2. 加载同模型类型的数据库特征
-            db = load_features_by_model(self.current_model)  # 只加载当前模型的特征
+            db = load_features_by_model(self.current_model)
             if not db:
                 self.result_text.append(f"[WARN] 没有找到{self.current_model}模型的注册特征")
                 return
 
-            # 3. 计算所有相似度/距离并排序
             scores = []
             for user, db_vec in db.items():
                 if self.current_metric == 'cosine':
                     score = cosine_similarity(current_vec, db_vec)
-                else:  # euclidean
-                    score = -euclidean_distance(current_vec, db_vec)  # 使用负值以便统一排序
+                else:
+                    score = -euclidean_distance(current_vec, db_vec)
                 scores.append((user, score))
 
-            # 按得分降序排序
             scores.sort(key=lambda x: x[1], reverse=True)
 
-            # 4. 显示前三结果
             metric_name = "相似度" if self.current_metric == 'cosine' else "距离(负值)"
             self.result_text.append(f"\n[MATCH] {self.current_model}模型匹配结果（{metric_name}）排名：")
             for i, (user, score) in enumerate(scores[:3], 1):
                 self.result_text.append(f"TOP {i}: {user} ({metric_name}: {score:.4f})")
 
-            # 5. 添加匹配建议
             best_user, best_score = scores[0]
             if self.current_metric == 'cosine':
-                if best_score > 0.8:  # 余弦相似度阈值
+                if best_score > 0.8:
                     self.result_text.append(f"\n[RESULT] 匹配成功: {best_user}")
                 else:
                     self.result_text.append("\n[RESULT] 无可靠匹配")
-            else:  # 欧式距离
-                if -best_score < 1.0:  # 欧式距离阈值
+            else:
+                if -best_score < 1.0:
                     self.result_text.append(f"\n[RESULT] 匹配成功: {best_user}")
                 else:
                     self.result_text.append("\n[RESULT] 无可靠匹配")

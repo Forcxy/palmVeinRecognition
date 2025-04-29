@@ -3,7 +3,7 @@ from PIL import Image
 import numpy as np
 from torchvision import transforms
 from typing import Union, Optional
-from core.model import swin_tiny_patch4_window7_224
+from core.model_swin import swin_tiny_patch4_window7_224
 
 
 def extract_swin_features(
@@ -47,7 +47,7 @@ def extract_swin_features(
         checkpoint = torch.load(weight_path, map_location='cpu')
         state_dict = checkpoint.get('model', checkpoint)
         state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
-        model.load_state_dict(state_dict, strict=True)
+        model.load_state_dict(state_dict, strict=False)
 
         # 修改forward方法
         def forward_features(self, x):

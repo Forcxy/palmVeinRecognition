@@ -2,6 +2,20 @@
 <project version="4">
   <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
+      <paths name="liugang@120.77.69.59:4131 password">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="liugang@120.77.69.59:4131 password (2)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
       <paths name="root@connect.yza1.seetacloud.com:35652 password">
         <serverdata>
           <mappings>
