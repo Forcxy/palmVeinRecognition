@@ -58,9 +58,9 @@ class CASIADatasetProcessor:
                     if img is None:
                         continue
 
-                    enhanced = enhance_image(img)
+                    # enhanced = enhance_image(img)
                     feat = extract_swin_features(
-                        image_input=enhanced,
+                        image_input=img,
                         weight_path=self.weight_path,
                         device=self.device
                     )

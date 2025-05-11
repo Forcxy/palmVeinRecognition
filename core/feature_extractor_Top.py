@@ -6,9 +6,10 @@ from core.feature_extractor_resnet import extract_resnet18_features
 from core.feature_extractor_swint import extract_swin_features
 from core.feature_extractor_viT import extract_vit_features
 from core.feature_extractor_moblieViT import extract_mobilevit_features
+from core.feature_extractor_swint_triplet import extract_swin_triplet_features
 
 def extract_features(
-        model_type: Literal['resnet', 'swin', 'viT', 'mobileViT'],
+        model_type: Literal['resnet', 'swin', 'viT', 'mobileViT', 'swinT-triplet'],
         image_input: Union[str, np.ndarray, Image.Image],
         weight_path: str = None,  # 设为可选
         roi_size: int = 224,
@@ -58,6 +59,12 @@ def extract_features(
             image_input=image_input,
             weight_path=weight_path,
             img_size=roi_size,
+            device=device
+        )
+    elif model_type == 'swinT-triplet':
+        return extract_swin_triplet_features(
+            image_input=image_input,
+            roi_size=roi_size,
             device=device
         )
     else:

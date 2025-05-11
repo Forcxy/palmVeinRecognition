@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QFileDialog, QVBoxLayout,
                              QHBoxLayout, QTextEdit, QComboBox, QInputDialog, QSpacerItem,
-                             QSizePolicy, QSlider, QGroupBox)
+                             QSizePolicy, QSlider, QGroupBox, QFrame)
 from PyQt5.QtGui import QPixmap, QImage, QFont
 from PyQt5.QtCore import Qt
 from core.roi_handler import extract_roi
@@ -37,34 +37,278 @@ class VeinRecognitionWindow(QWidget):
         self.clahe_grid_size = 8
 
     def setup_ui(self):
+        # 设置主窗口背景为带白色线条纹理的蓝色背景
+        # self.setStyleSheet("""
+        #     QWidget {
+        #         background-color: qlineargradient(
+        #             spread:pad, x1:0, y1:0, x2:1, y2:1,
+        #             stop:0 rgba(30, 70, 120, 255),
+        #             stop:1 rgba(50, 100, 160, 255)
+        #         );
+        #         background-image: url(:/texture.png);
+        #     }
+        # """)
+
+        # 主字体设置 - 使用华文中宋
         font = QFont("华文中宋", 12)
+        title_font = QFont("华文中宋", 12, QFont.Bold)
 
-        # 图片显示区域
-        self.image_label = QLabel()
-        self.roi_label = QLabel()
+        # 创建主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(15)
+
+        # 创建顶部按钮栏
+        self.create_top_button_bar(main_layout, font)
+
+        # 创建图像显示区域
+        self.create_image_display_area(main_layout, font, title_font)
+
+        # 创建结果文本框
+        self.create_result_textbox(main_layout, font)
+
+    def create_top_button_bar(self, parent_layout, font):
+        """创建顶部功能按钮栏"""
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+
+        # 上传按钮
+        self.upload_btn = QPushButton("上传图像")
+        self.upload_btn.setFont(font)
+        self.upload_btn.clicked.connect(self.upload_image)
+        button_layout.addWidget(self.upload_btn)
+
+        # 特征注册按钮
+        self.feature_btn = QPushButton("特征注册")
+        self.feature_btn.setFont(font)
+        self.feature_btn.clicked.connect(self.register_feature)
+        button_layout.addWidget(self.feature_btn)
+
+        # 特征匹配按钮
+        self.match_btn = QPushButton("特征匹配")
+        self.match_btn.setFont(font)
+        self.match_btn.clicked.connect(self.match_feature)
+        button_layout.addWidget(self.match_btn)
+
+        # 模型选择下拉框
+        self.model_selector = QComboBox()
+        self.model_selector.addItems(["Swin-transformer", "ResNet", "ViT", "MobileViT"])
+        self.model_selector.setFont(font)
+        self.model_selector.setStyleSheet("""
+            QComboBox {
+                background-color: rgba(255,255,255,150);
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 3px;
+                min-width: 120px;
+            }
+        """)
+        self.model_selector.currentTextChanged.connect(self.change_model)
+        button_layout.addWidget(self.model_selector)
+
+        # 距离度量选择下拉框
+        self.metric_selector = QComboBox()
+        self.metric_selector.addItems(["余弦距离", "欧式距离"])
+        self.metric_selector.setFont(font)
+        self.metric_selector.setStyleSheet(self.model_selector.styleSheet())
+        self.metric_selector.currentTextChanged.connect(self.change_metric)
+        button_layout.addWidget(self.metric_selector)
+
+        # 返回按钮
+        self.back_btn = QPushButton("返回主菜单")
+        self.back_btn.setFont(font)
+        self.back_btn.clicked.connect(self.go_back)
+        button_layout.addWidget(self.back_btn)
+
+        # 设置按钮样式
+        for btn in [self.upload_btn, self.feature_btn, self.match_btn, self.back_btn]:
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(70,130,180,200);
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    padding: 8px 15px;
+                    min-width: 80px;
+                }
+                QPushButton:hover {
+                    background-color: rgba(70,130,180,150);
+                }
+            """)
+
+        parent_layout.addLayout(button_layout)
+
+    def create_image_display_area(self, parent_layout, font, title_font):
+        """创建图像显示区域"""
+        image_layout = QHBoxLayout()
+        image_layout.setSpacing(20)
+
+        # 原图区域
+        self.create_image_panel(image_layout, "原图", 350, font)
+
+        # ROI区域
+        self.create_image_panel(image_layout, "ROI", 350, font)
+
+        # 图像增强区域
+        self.create_enhancement_panel(image_layout, title_font)
+
+        parent_layout.addLayout(image_layout)
+
+    def create_image_panel(self, parent_layout, title, size, font):
+        """创建单个图像显示面板（外层无边框+透明，内层保留白色背景）"""
+        container = QFrame()
+        # container.setStyleSheet("""
+        #     QFrame {
+        #         background-color: transparent;  # 外层透明
+        #         border: none;                   # 外层无边框
+        #     }
+        # """)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)  # 移除外层内边距
+        layout.setSpacing(5)  # 标题和图像之间的间距
+
+        # 图像标签（保留白色背景，但无额外边框）
+        image_label = QLabel()
+        image_label.setAlignment(Qt.AlignCenter)
+        image_label.setFixedSize(size, size)
+        image_label.setStyleSheet("""
+            QLabel {
+                background-color: rgba(240,240,240,180);
+                border-radius: 8px;
+                border: 1px solid gray;
+            }
+        """)
+        layout.addWidget(image_label)
+
+        # 图像标题（仅文字，无背景）
+        caption = QLabel(title)
+        caption.setAlignment(Qt.AlignCenter)
+        caption.setFont(font)
+        caption.setStyleSheet("QLabel { color: black; background: transparent; }")
+        layout.addWidget(caption)
+
+        # 保存引用
+        if title == "原图":
+            self.image_label = image_label
+            self.image_caption = caption
+        elif title == "ROI":
+            self.roi_label = image_label
+            self.roi_caption = caption
+
+        parent_layout.addWidget(container)
+
+    def create_enhancement_panel(self, parent_layout, title_font):
+        """创建图像增强面板（外层无边框+透明，内层保留白色背景）"""
+        container = QFrame()
+        # container.setStyleSheet("""
+        #     QFrame {
+        #         background-color: transparent;  # 外层透明
+        #         border: none;                   # 外层无边框
+        #     }
+        # """)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)  # 移除外层内边距
+        layout.setSpacing(10)  # 内部组件间距
+
+        # 参数设置标题
+        param_label = QLabel("图像增强参数设置")
+        param_label.setAlignment(Qt.AlignCenter)
+        param_label.setFont(title_font)
+        param_label.setStyleSheet("QLabel { color: white; margin-bottom: 10px; font-weight: normal;}")  # 改为黑色文字
+        layout.addWidget(param_label)
+
+        # 对比度控制
+        contrast_layout = QHBoxLayout()
+        contrast_layout.setSpacing(10)
+
+        contrast_label = QLabel("对比度阈值:")
+        contrast_label.setFont(title_font)
+        contrast_label.setStyleSheet("QLabel { color: white; min-width: 60px; font-weight: normal;}")  # 改为黑色文字
+        contrast_layout.addWidget(contrast_label)
+
+        self.clip_limit_slider = QSlider(Qt.Horizontal)
+        self.clip_limit_slider.setRange(10, 40)
+        self.clip_limit_slider.setValue(20)
+        self.clip_limit_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                height: 6px;
+                background: rgba(80, 80, 80, 150);
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: rgb(70, 130, 180);
+                border: 2px solid rgb(80, 140, 200);
+                width: 14px;
+                height: 14px;
+                margin: -4px 0;
+                border-radius: 1px;  /* 轻微圆角 */
+            }
+            QSlider::sub-page:horizontal {
+                background: rgb(70, 130, 180);
+                border-radius: 3px;
+            }
+        """)
+        self.clip_limit_slider.valueChanged.connect(self.update_enhanced_image)
+        contrast_layout.addWidget(self.clip_limit_slider, 1)
+
+        self.clip_limit_value = QLabel("2.0")
+        self.clip_limit_value.setFont(title_font)
+        self.clip_limit_value.setStyleSheet("QLabel { color: white; min-width: 30px; font-weight: normal;}")  # 改为黑色文字
+        self.clip_limit_value.setAlignment(Qt.AlignCenter)
+        contrast_layout.addWidget(self.clip_limit_value)
+
+        layout.addLayout(contrast_layout)
+
+        # 网格控制
+        grid_layout = QHBoxLayout()
+        grid_layout.setSpacing(10)
+
+        grid_label = QLabel("网格:")
+        grid_label.setFont(title_font)
+        grid_label.setStyleSheet("QLabel { color: white; min-width: 60px; font-weight: normal;}")  # 改为黑色文字
+        grid_layout.addWidget(grid_label)
+
+        self.grid_size_slider = QSlider(Qt.Horizontal)
+        self.grid_size_slider.setRange(1, 20)
+        self.grid_size_slider.setValue(8)
+        self.grid_size_slider.setStyleSheet(self.clip_limit_slider.styleSheet())
+        self.grid_size_slider.valueChanged.connect(self.update_enhanced_image)
+        grid_layout.addWidget(self.grid_size_slider, 1)
+
+        self.grid_size_value = QLabel("8")
+        self.grid_size_value.setFont(title_font)
+        self.grid_size_value.setStyleSheet("QLabel { color: white; min-width: 30px; font-weight: normal;}")  # 改为黑色文字
+        self.grid_size_value.setAlignment(Qt.AlignCenter)
+        grid_layout.addWidget(self.grid_size_value)
+
+        layout.addLayout(grid_layout)
+
+        # 增强图像显示（保留白色背景）
         self.enhanced_label = QLabel()
-
-        # 图片标题
-        self.image_caption = QLabel("原图")
-        self.roi_caption = QLabel("ROI")
-        self.enhanced_caption = QLabel("图像增强")
-
-        # 设置图片尺寸
-        self.image_label.setFixedSize(350, 350)
-        self.roi_label.setFixedSize(350, 350)
+        self.enhanced_label.setAlignment(Qt.AlignCenter)
         self.enhanced_label.setFixedSize(200, 200)
+        self.enhanced_label.setStyleSheet("""
+            QLabel {
+                background-color: rgba(240,240,240,180);
+                border-radius: 8px;
+                border: 1px solid gray;
+                margin-top: 15px;
+                margin-bottom: 5px;
+            }
+        """)
+        layout.addWidget(self.enhanced_label, 0, Qt.AlignHCenter)
 
-        # 设置图片样式
-        for label in [self.image_label, self.roi_label, self.enhanced_label]:
-            label.setAlignment(Qt.AlignCenter)
-            label.setStyleSheet("border: 1px solid gray; background-color: rgba(255, 255, 255, 200)")
+        # 增强图像标题
+        self.enhanced_caption = QLabel("图像增强")
+        self.enhanced_caption.setAlignment(Qt.AlignCenter)
+        self.enhanced_caption.setFont(title_font)
+        self.enhanced_caption.setStyleSheet("QLabel { color: black; font-weight: normal;}")  # 改为黑色文字
+        layout.addWidget(self.enhanced_caption)
 
-        # 设置标题样式
-        for caption in [self.image_caption, self.roi_caption, self.enhanced_caption]:
-            caption.setAlignment(Qt.AlignCenter)
-            caption.setFont(font)
-            caption.setStyleSheet("QLabel { color: black; }")
+        parent_layout.addWidget(container)
 
+    def create_result_textbox(self, parent_layout, font):
+        """创建结果文本框"""
         self.result_text = QTextEdit()
         self.result_text.setReadOnly(True)
         self.result_text.setFont(font)
@@ -76,106 +320,7 @@ class VeinRecognitionWindow(QWidget):
                 padding: 12px;
             }
         """)
-
-        # 主功能按钮
-        self.upload_btn = QPushButton("上传图像")
-        self.upload_btn.clicked.connect(self.upload_image)
-
-        self.feature_btn = QPushButton("特征注册")
-        self.feature_btn.clicked.connect(self.register_feature)
-
-        self.match_btn = QPushButton("特征匹配")
-        self.match_btn.clicked.connect(self.match_feature)
-
-        self.back_btn = QPushButton("返回主菜单")
-        self.back_btn.clicked.connect(self.go_back)
-
-        # 模型选择下拉框
-        self.model_selector = QComboBox()
-        self.model_selector.addItems(["Swin-transformer", "ResNet", "ViT", "MobileViT"])
-        self.model_selector.setFont(font)
-        self.model_selector.currentTextChanged.connect(self.change_model)
-
-        # 距离度量选择下拉框
-        self.metric_selector = QComboBox()
-        self.metric_selector.addItems(["余弦距离", "欧式距离"])
-        self.metric_selector.setFont(font)
-        self.metric_selector.currentTextChanged.connect(self.change_metric)
-
-        # 按钮布局
-        btn_layout = QHBoxLayout()
-        btn_layout.addWidget(self.upload_btn)
-        btn_layout.addWidget(self.feature_btn)
-        btn_layout.addWidget(self.match_btn)
-        btn_layout.addWidget(self.model_selector)
-        btn_layout.addWidget(self.metric_selector)
-        btn_layout.addWidget(self.back_btn)
-
-        # 图像布局
-        image_layout = QHBoxLayout()
-
-        # 原图列
-        vbox1 = QVBoxLayout()
-        vbox1.addWidget(self.image_label)
-        vbox1.addWidget(self.image_caption)
-        image_layout.addLayout(vbox1)
-
-        # spacer between 图1 and 图2
-        image_layout.addSpacerItem(QSpacerItem(50, 30, QSizePolicy.Fixed, QSizePolicy.Minimum))
-
-        # ROI列
-        vbox2 = QVBoxLayout()
-        vbox2.addWidget(self.roi_label)
-        vbox2.addWidget(self.roi_caption)
-        image_layout.addLayout(vbox2)
-
-        # 图像增强列
-        enhanced_container = QWidget()
-        enhanced_vbox = QVBoxLayout(enhanced_container)
-
-        # 添加参数控制
-        param_label = QLabel("图像增强参数设置")
-        param_label.setAlignment(Qt.AlignCenter)
-        param_label.setStyleSheet("font-weight: bold; margin-bottom: 5px;")
-        enhanced_vbox.addWidget(param_label)
-
-        # 滑块控制
-        slider_hbox = QHBoxLayout()
-
-        # 对比度限制滑块
-        self.clip_limit_slider = QSlider(Qt.Horizontal)
-        self.clip_limit_slider.setRange(10, 80)  # 1.0-4.0
-        self.clip_limit_slider.setValue(20)  # 默认2.0
-        self.clip_limit_slider.valueChanged.connect(self.update_enhanced_image)
-
-        # 网格大小滑块
-        self.grid_size_slider = QSlider(Qt.Horizontal)
-        self.grid_size_slider.setRange(1, 20)  # 1-20
-        self.grid_size_slider.setValue(8)  # 默认8
-        self.grid_size_slider.valueChanged.connect(self.update_enhanced_image)
-
-        # 添加到滑块布局
-        slider_hbox.addWidget(QLabel("对比度:"))
-        slider_hbox.addWidget(self.clip_limit_slider)
-        slider_hbox.addWidget(QLabel("网格:"))
-        slider_hbox.addWidget(self.grid_size_slider)
-
-        enhanced_vbox.addLayout(slider_hbox)
-
-        # 添加增强图像和标题
-        enhanced_vbox.addWidget(self.enhanced_label)
-        enhanced_vbox.addWidget(self.enhanced_caption)
-
-        image_layout.addWidget(enhanced_container)
-
-        # 总体布局
-        main_layout = QVBoxLayout()
-        main_layout.addLayout(btn_layout)
-        main_layout.addSpacing(20)
-        main_layout.addLayout(image_layout)
-        main_layout.addWidget(self.result_text)
-
-        self.setLayout(main_layout)
+        parent_layout.addWidget(self.result_text)
 
     def change_model(self, text):
         """切换特征提取模型"""
@@ -262,6 +407,10 @@ class VeinRecognitionWindow(QWidget):
         if self.roi_image is not None:
             clip_limit = self.clip_limit_slider.value() / 10.0
             grid_size = self.grid_size_slider.value()
+
+            # 更新数值显示
+            self.clip_limit_value.setText(f"{clip_limit:.1f}")
+            self.grid_size_value.setText(f"{grid_size}")
 
             self.enhanced_image = self.enhance_image(
                 self.roi_image,

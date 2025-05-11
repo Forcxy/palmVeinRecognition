@@ -13,6 +13,7 @@ from core.database_handler import (load_features_by_model, get_user_features,
 import sqlite3
 import matplotlib.pyplot as plt
 plt.rcParams['font.family'] = 'SimHei'  # 黑体，支持中文
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 class FeatureDatabaseWindow(QWidget):
     def __init__(self, parent=None):

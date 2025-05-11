@@ -90,7 +90,7 @@ class CASIADatasetProcessor:
                         continue
 
                     # 2. 图像增强处理,均转成灰度图像
-                    enhanced_img = enhance_image(img)
+                    # enhanced_img = enhance_image(img)
 
                     # # 3. 使用Swin Transformer提取特征
                     # feature = extract_swin_features(
@@ -99,12 +99,11 @@ class CASIADatasetProcessor:
                     #     device=self.device
                     # )
                     feature = extract_features(
-                        model_type='swinT-triplet',
-                        #model_type='swin',
+                        model_type='swin',
                         weight_path=self.weight_path,
-                        image_input=enhanced_img,
+                        image_input=img,
                     )
-                    #feature = l2_normalize(feature)
+                    feature = l2_normalize(feature)
                     cls_features.append(feature)
 
                 except Exception as e:
@@ -185,7 +184,7 @@ class CASIADatasetProcessor:
             self,
             positive_pairs: List,
             negative_pairs: List,
-            metric: str = "euclidean"  # 新增参数，可选 "euclidean" 或 "euclidean"
+            metric: str = "euclidean"  # 新增参数，可选 "cosine" 或 "euclidean"
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         计算正负样本对的相似度（支持余弦/欧氏距离）
@@ -377,8 +376,8 @@ class CASIADatasetProcessor:
 
 if __name__ == "__main__":
     # 配置参数
-    DATASET_PATH = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\dataset\CASIA"  # 数据集路径
-    # DATASET_PATH = r"C:\Users\CXY\Desktop\graduationDesign\dataset\AllVeinDataset\HFUT_split\val"  # 数据集路径
+    #DATASET_PATH = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\dataset\CASIA"  # 数据集路径
+    DATASET_PATH = r"C:\Users\CXY\Desktop\graduationDesign\dataset\AllVeinDataset\HFUT_split\val"  # 数据集路径
     WEIGHT_PATH = None # None表示使用默认路径
     #WEIGHT_PATH = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\weights\resNet18-all.pth"  # 模型权重路径
     CUSTOM_NUM_PAIRS = None # 自定义样本对数（None表示自动计算）

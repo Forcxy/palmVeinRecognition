@@ -7,7 +7,8 @@ from core.model_swin import swin_tiny_patch4_window7_224
 
 def extract_swin_features(
         image_input: Union[str, np.ndarray, Image.Image],  # 支持路径/numpy数组/PIL图像
-        weight_path: str = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\weights\model_swin_L2L3_1.pth",
+        weight_path: str = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\weights\swinT\T-L2L3Head_C3_E\model_swin_L2L3_1.pth",
+        #weight_path: str = r"C:\Users\CXY\Desktop\graduationDesign\project\palmVein\weights\swinT\model_swint35.pth",
         roi_size: int = 224,
         device: Optional[str] = None
 ) -> torch.Tensor:
