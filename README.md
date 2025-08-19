@@ -1,1 +1,2 @@
 # palmVeinRecognition
+使用pyside构建掌静脉识别系统
